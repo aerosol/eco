@@ -1,0 +1,12 @@
+{application, eco,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { eco_app, [{config_dir, "conf/"}]}},
+  {env, []}
+ ]}.

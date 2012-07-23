@@ -1,0 +1,8 @@
+t
+deps
+*.o
+*.beam
+*.plt
+Mnesia*
+dump
+
