@@ -19,6 +19,7 @@
 
 %% API
 -export([start_link/1]).
+-export([start_shell/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -29,6 +30,12 @@
 
 start_link(ConfigDir) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [ConfigDir]).
+
+start_shell() ->
+    supervisor:start_child(?MODULE, { eco_shell,
+                                     {eco_shell, start_link, []},
+                                     permanent, 5000, worker,
+                                     [eco_shell]} ).
 
 %% ===================================================================
 %% Supervisor callbacks

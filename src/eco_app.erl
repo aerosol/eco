@@ -61,7 +61,9 @@ start(_StartType, StartArgs) ->
     case mnesia:wait_for_tables([eco_snapshot, eco_kv], 5000) of
         ok ->
             ConfigDir = proplists:get_value(config_dir, StartArgs),
-            eco_sup:start_link(ConfigDir);
+            Ret = eco_sup:start_link(ConfigDir),
+            start_plugins(proplists:get_value(plugins, StartArgs, [])),
+            Ret;
         Error ->
             error_logger:error_msg("Eco could not initialize Mnesia tables.~n"
                                    "Possible solution: run eco_app:init_clean/0~n"
@@ -69,6 +71,17 @@ start(_StartType, StartArgs) ->
                                   ),
             Error
     end.
+
+start_plugins([]) ->
+    ok;
+start_plugins([shell|Rest]) ->
+    application:start(crypto),
+    application:start(public_key),
+    application:start(ssh),
+    eco_sup:start_shell(),
+    start_plugins(Rest);
+start_plugins([Unknown|_]) ->
+    erlang:error({unknown_eco_plugin, Unknown}).
 
 stop(_State) ->
     ok.

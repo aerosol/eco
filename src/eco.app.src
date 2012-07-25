@@ -7,6 +7,11 @@
                   kernel,
                   stdlib
                  ]},
-  {mod, { eco_app, [{config_dir, "conf/"}]}},
+  {mod,
+    { eco_app, [
+        {config_dir, "conf/"},
+        {plugins, [shell]}
+    ]}
+  },
   {env, []}
  ]}.
