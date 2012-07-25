@@ -22,8 +22,8 @@ dialyze:
 	@$(DIALYZER) --src src --plt .$(PROJECT).plt --no_native \
 		-Werror_handling -Wrace_conditions -Wunmatched_returns # -Wunderspecs
 
-shell: app
-	erl -pa ebin -boot start_sasl
+run: app
+	erl -pa ebin -boot start_sasl -s eco
 
 example: clean app
 	rm -rf Mnesia.example*

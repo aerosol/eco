@@ -17,6 +17,9 @@
 -behaviour(gen_server).
 %% User API
 
+-export([start/0]).
+-export([initialize/0]).
+
 -export([setup/1]).
 -export([terms/1]).
 -export([term/2, term/3]).
@@ -46,6 +49,19 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%% @doc Start the eco application
+-spec start() -> {ok, pid()}.
+start() ->
+    application:start(eco).
+
+%% @doc Initialize mnesia schema and create tables.
+%%
+%% This function should be called just once when first time initializing
+%% your working environment.
+-spec initialize() -> ok.
+initialize() ->
+    eco_app:init_clean().
 
 %% @doc Start configuration server loading files from <em>ConfigDir</em>.
 %%
