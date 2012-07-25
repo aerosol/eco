@@ -19,7 +19,6 @@
 
 %% Application callbacks
 -export([start/2, stop/1]).
--export([start/0]).
 -export([init_clean/0]).
 
 -include("eco.hrl").
@@ -27,9 +26,6 @@
 %% ===================================================================
 %% Application callbacks
 %% ===================================================================
-
-start() ->
-    application:start(eco).
 
 init_clean() ->
     ok = mnesia:create_schema([node()]),
@@ -62,14 +58,29 @@ start(_StartType, StartArgs) ->
         ok ->
             ConfigDir = proplists:get_value(config_dir, StartArgs),
             Ret = eco_sup:start_link(ConfigDir),
-            start_plugins(proplists:get_value(plugins, StartArgs, [])),
+            start_plugins(get_plugins(StartArgs)),
             Ret;
         Error ->
             error_logger:error_msg("Eco could not initialize Mnesia tables.~n"
-                                   "Possible solution: run eco_app:init_clean/0~n"
+                                   "Possible solution: initialize Mnesia schema.~n"
                                    "The error message was: ~n~p~n", [Error]
                                   ),
             Error
+    end.
+
+get_plugins(StartArgs) ->
+    case init:get_argument(eco_plugins) of
+        {ok, [Plugins]} ->
+            lists:map(
+                fun(Plugin) ->
+                        try
+                            erlang:list_to_existing_atom(Plugin)
+                        catch error:badarg ->
+                            unknown_plugin(Plugin)
+                        end
+                end, Plugins);
+        error ->
+            proplists:get_value(plugins, StartArgs, [])
     end.
 
 start_plugins([]) ->
@@ -81,7 +92,10 @@ start_plugins([shell|Rest]) ->
     eco_sup:start_shell(),
     start_plugins(Rest);
 start_plugins([Unknown|_]) ->
-    erlang:error({unknown_eco_plugin, Unknown}).
+    unknown_plugin(Unknown).
+
+unknown_plugin(Plugin) ->
+    erlang:error({unknown_eco_plugin, Plugin}).
 
 stop(_State) ->
     ok.

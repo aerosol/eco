@@ -15,8 +15,8 @@
 %% @doc Eco - Lightweight Erlang environment configuration server with Mnesia backend
 -module(eco).
 -behaviour(gen_server).
-%% User API
 
+%% User API
 -export([start/0]).
 -export([initialize/0]).
 
