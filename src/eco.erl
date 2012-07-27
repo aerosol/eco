@@ -361,11 +361,11 @@ u_consult(File) ->
             Error
     end.
 
-%% This comes from lib/kernel-2.15.1/src/file.erl
+%% Slightly modified lib/kernel-2.15.1/src/file.erl
 consult_stream(Fd) ->
     consult_stream(Fd, 1, []).
 consult_stream(Fd, Line, Acc) ->
-    case io:read(Fd, '', Line) of
+    case io:read(Fd, Line) of
         {ok,Term,EndLine} ->
             consult_stream(Fd, EndLine, [Term|Acc]);
         {error, Error, Line} ->
