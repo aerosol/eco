@@ -1,6 +1,7 @@
 -module(eco_shell).
 
 -behaviour(gen_server).
+-compile([export_all]).
 
 %% API
 -export([start_link/0]).
@@ -45,7 +46,7 @@ init([]) ->
                             {shell, fun() ->
                             spawn(fun start_shell/0)
                     end } ]),
-    ?CACHE = ets:new(?CACHE, [ordered_set, named_table, protected]),
+    initialize_cache(),
     register_module(eco_shell_std),
     {ok, #state{
                 daemon_ref = Ref
@@ -74,6 +75,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+initialize_cache() ->
+    ?CACHE = ets:new(?CACHE, [ordered_set, named_table, protected]).
 
 extract_commands(Module) when is_atom(Module) ->
     {module, Module} = code:ensure_loaded(Module),
@@ -104,7 +108,7 @@ find_commands_by_prefix(Prefix) ->
     end.
 
 return_to_shell([], _) ->
-    {no, "", [""]};
+    {no, "", []};
 return_to_shell([One], Pref) when is_list(One) ->
     {yes, lists:flatten([One--Pref, " "]), []};
 return_to_shell(Multiple, _) when is_list(Multiple) ->
@@ -122,7 +126,7 @@ expand({full, Cmd, Pref, Argv}) ->
             end,
             Completions),
         return_to_shell(Matching, Pref)
-    catch error:function_clause ->
+    catch error:E when E =:= function_clause; E =:= undef ->
             return_to_shell([], [])
     end;
 expand({args, Cmd, Prefix, Argv}) ->
@@ -136,10 +140,12 @@ expand({partial, [Cmd]}) when is_list(Cmd) ->
 expand({partial, [Pref|L]}) when is_list(Pref) ->
     Cmd = hd(lists:reverse(L)),
     expand({args, Cmd, Pref, length(L)});
-expand(" " ++ Cli) when is_list(Cli) ->
-    expand({partial, [" " | string:tokens(Cli, " ")]});
-expand(Cli) when is_list(Cli) ->
-    expand({partial, string:tokens(Cli, " ")}).
+expand(" " ++ Cmd) when is_list(Cmd) ->
+    expand({partial, [" " | string:tokens(Cmd, " ")]});
+expand([]) ->
+    return_to_shell(find_commands_by_prefix(""), "");
+expand(Cmd) when is_list(Cmd) ->
+    expand({partial, string:tokens(Cmd, " ")}).
 
 get_input(Prompt) ->
     trim(io:get_line(Prompt)).
@@ -153,3 +159,38 @@ trim1([$\r|Cs]) -> trim(Cs);
 trim1([$\n|Cs]) -> trim(Cs);
 trim1([$\t|Cs]) -> trim(Cs);
 trim1(Cs) -> Cs.
+
+-ifdef (TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+auto_completion_test_() ->
+    {setup,
+     fun() ->
+                ?CACHE = initialize_cache(),
+                true = ets:insert(?CACHE, [
+                            {"reload", {reload, eco_shell_std}},
+                            {"newline",{io, nl}},
+                            {"nop",    {foo, bar}}
+                            ]),
+                setup_ok
+        end,
+     fun(setup_ok) ->
+                Tests = [
+                        { {yes, "eload ", []}, "r" },
+                        { {yes, "oad ", []}, "rel" },
+                        { {yes, "bc ", []}, "reload a" },
+                        { {yes, "wline ", []}, "ne" },
+                        { {yes, "", ["newline", "nop"]}, "n" },
+                        { {yes, "", eco_shell_std:reload({completions, 1}) }, ("reload ") },
+                        { {no, [], []}, "newline " },
+                        { {no, [], []}, "reload a " },
+                        { {no, [], []}, "reload abc y" },
+                        { {no, [], []}, "x" }
+                        ],
+                [ { iolist_to_binary(["User input: ", I]), fun() ->
+                        ?assertEqual(R, expand(lists:reverse(I)))
+                    end} || {R, I} <- Tests ]
+        end}.
+
+
+-endif.
