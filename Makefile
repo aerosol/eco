@@ -23,7 +23,7 @@ dialyze:
 		-Werror_handling -Wrace_conditions -Wunmatched_returns # -Wunderspecs
 
 run: app
-	erl -pa ebin -boot start_sasl -s eco
+	erl -pa ebin -boot start_sasl -s eco -eco_plugins shell
 
 example: clean app
 	rm -rf Mnesia.example*

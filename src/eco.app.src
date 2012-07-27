@@ -10,7 +10,7 @@
   {mod,
     { eco_app, [
         {config_dir, "conf/"},
-        {plugins, [shell]}
+        {plugins, []}
     ]}
   },
   {env, []}

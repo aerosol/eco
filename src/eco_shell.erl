@@ -14,11 +14,12 @@
          code_change/3]).
 
 -record(state, {
-            ref
+            daemon_ref,
+            commands = []
         }).
 
 -define(PROMPT, <<"eco $ ">>).
--define(PROMPT_CONT, <<"eco (...) $ ">>).
+-define(CACHE, eco_shell_commands).
 
 %%%===================================================================
 %%% API
@@ -26,6 +27,9 @@
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+register_module(Mod) when is_atom(Mod) ->
+    gen_server:cast(?MODULE, {register, Mod}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -39,24 +43,29 @@ init([]) ->
     {ok, Ref} = ssh:daemon(Port, [{system_dir, SysDir},
                             {user_dir, UserDir},
                             {shell, fun() ->
-                            spawn(fun shell_loop/0)
+                            spawn(fun start_shell/0)
                     end } ]),
-    io:format("~p~n", [Ref]),
+    ?CACHE = ets:new(?CACHE, [ordered_set, named_table, protected]),
+    register_module(eco_shell_std),
     {ok, #state{
-                ref = Ref
+                daemon_ref = Ref
             }}.
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
+handle_cast({register, Module}, State) ->
+    true = ets:insert(?CACHE, extract_commands(Module)),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{ daemon_ref = Ref }) ->
+    ssh:stop_daemon(Ref),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -66,12 +75,71 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+extract_commands(Module) when is_atom(Module) ->
+    {module, Module} = code:ensure_loaded(Module),
+    extract_commands({Module, Module:module_info(exports)}, []).
+
+extract_commands({_, []}, Acc) -> Acc;
+extract_commands({Module, [{Fun, 1}|Rest]}, Acc) when Fun =/= module_info ->
+    extract_commands({Module, Rest}, [{erlang:atom_to_list(Fun), {Fun, Module}}|Acc]);
+extract_commands({Module, [_|Rest]}, Acc) ->
+    extract_commands({Module, Rest}, Acc).
+
+start_shell() ->
+    io:setopts([{expand_fun, fun expand/1}]),
+    shell_loop().
+
 shell_loop() ->
     case get_input(?PROMPT) of
         Cmd ->
-            io:format("~n~s: ~s~n", ["Unknown command", Cmd]),
+            io:format("Unknown command: ~p~n", [Cmd]),
             shell_loop()
     end.
+
+find_commands_by_prefix(Prefix) ->
+    case ets:match_object(?CACHE, {Prefix++'_', '_'}) of
+        [ {_,_}, _|_ ] = Commands -> [ C || {C, _} <- Commands ];
+        [ {C, _} ] -> [C];
+        [] -> []
+    end.
+
+return_to_shell([], _) ->
+    {no, "", [""]};
+return_to_shell([One], Pref) when is_list(One) ->
+    {yes, lists:flatten([One--Pref, " "]), []};
+return_to_shell(Multiple, _) when is_list(Multiple) ->
+    {yes, "", Multiple}.
+
+expand({full, [], Pref, 0}) ->
+    return_to_shell(find_commands_by_prefix(Pref), Pref);
+expand({full, Cmd, Pref, Argv}) ->
+    [{_, {Fun, Mod}}] = ets:lookup(?CACHE, Cmd),
+    try
+        Completions = Mod:Fun({completions, Argv}),
+        Matching = lists:filter(
+            fun(Arg) ->
+                lists:prefix(Pref, Arg)
+            end,
+            Completions),
+        return_to_shell(Matching, Pref)
+    catch error:function_clause ->
+            return_to_shell([], [])
+    end;
+expand({args, Cmd, Prefix, Argv}) ->
+    expand({full, lists:reverse(Cmd), lists:reverse(Prefix), Argv});
+expand({partial, [" ", Cmd]}) when is_list(Cmd) ->
+    expand({args, Cmd, "", 1});
+expand({partial, [Pref, Cmd]}) when is_list(Cmd) ->
+    expand({args, Cmd, Pref, 1});
+expand({partial, [Cmd]}) when is_list(Cmd) ->
+    expand({args, "", Cmd, 0});
+expand({partial, [Pref|L]}) when is_list(Pref) ->
+    Cmd = hd(lists:reverse(L)),
+    expand({args, Cmd, Pref, length(L)});
+expand(" " ++ Cli) when is_list(Cli) ->
+    expand({partial, [" " | string:tokens(Cli, " ")]});
+expand(Cli) when is_list(Cli) ->
+    expand({partial, string:tokens(Cli, " ")}).
 
 get_input(Prompt) ->
     trim(io:get_line(Prompt)).
