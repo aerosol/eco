@@ -66,7 +66,7 @@ initialize() ->
 %% @doc Start configuration server loading files from <em>ConfigDir</em>.
 %%
 %% NOTE:
-%% This functions initializes configuration server in its basic state.
+%% This function initializes configuration server in its basic state.
 %% No file will be loaded unless you do a proper <em>setup/1</em> call.
 -spec start_link(binary() | string()) -> {ok, pid()}.
 start_link(ConfigDir) ->
@@ -349,6 +349,7 @@ load_config2({Mod, Fun}, File) ->
 load_config2(Custom, File) ->
     Custom:process_config(File).
 
+%% Same as file:consult/1 except reads unicode
 -spec u_consult(config_path()) -> {ok, term()} | {error, any()}.
 u_consult(File) ->
     case file:open(File, [read, {encoding, unicode}]) of
@@ -360,6 +361,7 @@ u_consult(File) ->
             Error
     end.
 
+%% This comes from lib/kernel-2.15.1/src/file.erl
 consult_stream(Fd) ->
     consult_stream(Fd, 1, []).
 consult_stream(Fd, Line, Acc) ->
