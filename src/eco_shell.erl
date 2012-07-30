@@ -51,6 +51,7 @@ register_module(Mod) when is_atom(Mod) ->
 %%%===================================================================
 
 init([]) ->
+    %% TODO allow overwrite all ssh opts
     {ok, F} = eco:setup(<<"eco_shell.conf">>),
     Port = eco:term(ssh_port, F, 2222),
     SysDir = eco:term(ssh_sys_dir, F, "priv/ssh-sys"),
@@ -79,7 +80,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #state{ daemon_ref = Ref }) ->
-    ssh:stop_daemon(Ref),
+    _ = ssh:stop_daemon(Ref),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -114,9 +115,37 @@ shell_loop() ->
             io:format("Bye!~n"),
             {ok, exit};
         Cmd ->
-            io:format("Unknown command: ~p~n", [Cmd]),
+            [Command|Args] = string:tokens(Cmd, " "),
+            case get_command(Command) of
+                [{Command, {F,M}}] ->
+                    try M:F(Args) of
+                        Result -> reply(Result)
+                    catch error:function_clause ->
+                            reply({error, <<"Invalid argument(s).">>});
+                        Class:Error ->
+                            reply({error, {Class, Error}})
+                    end;
+                _ ->
+                  io:format("Command not recognized: ~s~n", [Command])
+            end,
             shell_loop()
     end.
+
+reply({ok, Result}) when is_binary(Result); is_atom(Result) ->
+    io:format("OK: ~s~n", [Result]);
+reply({ok, Result}) ->
+    io:format("OK: ~p~n", [Result]);
+reply(Result) when is_binary(Result); is_atom(Result) ->
+    io:format("~s~n", [Result]);
+reply({error, Result}) when is_binary(Result); is_atom(Result) ->
+    io:format("ERROR: ~s~n", [Result]);
+reply({error, Result}) ->
+    io:format("ERROR: ~p~n", [Result]);
+reply(Term) ->
+    io:format("~p~n", [Term]).
+
+get_command(Command) ->
+    ets:lookup(?CACHE, Command).
 
 find_commands_by_prefix(Prefix) ->
     case ets:match_object(?CACHE, {Prefix++'_', '_'}) of
@@ -125,15 +154,15 @@ find_commands_by_prefix(Prefix) ->
         [] -> []
     end.
 
-return_to_shell([], _) ->
+suggest([], _) ->
     {no, "", []};
-return_to_shell([One], Pref) when is_list(One) ->
+suggest([One], Pref) when is_list(One) ->
     {yes, lists:flatten([One--Pref, " "]), []};
-return_to_shell(Multiple, _) when is_list(Multiple) ->
+suggest(Multiple, _) when is_list(Multiple) ->
     {yes, "", Multiple}.
 
 expand({full, [], Pref, 0}) ->
-    return_to_shell(find_commands_by_prefix(Pref), Pref);
+    suggest(find_commands_by_prefix(Pref), Pref);
 expand({full, Cmd, Pref, Argv}) ->
     [{_, {Fun, Mod}}] = ets:lookup(?CACHE, Cmd),
     try
@@ -143,9 +172,9 @@ expand({full, Cmd, Pref, Argv}) ->
                 lists:prefix(Pref, Arg)
             end,
             Completions),
-        return_to_shell(Matching, Pref)
+        suggest(Matching, Pref)
     catch error:E when E =:= function_clause; E =:= undef ->
-            return_to_shell([], [])
+            suggest([], [])
     end;
 expand({args, Cmd, Prefix, Argv}) ->
     expand({full, lists:reverse(Cmd), lists:reverse(Prefix), Argv});
@@ -161,7 +190,7 @@ expand({partial, [Pref|L]}) when is_list(Pref) ->
 expand(" " ++ Cmd) when is_list(Cmd) ->
     expand({partial, [" " | string:tokens(Cmd, " ")]});
 expand([]) ->
-    return_to_shell(find_commands_by_prefix(""), "");
+    suggest(find_commands_by_prefix(""), "");
 expand(Cmd) when is_list(Cmd) ->
     expand({partial, string:tokens(Cmd, " ")}).
 
@@ -209,6 +238,5 @@ auto_completion_test_() ->
                         ?assertEqual(R, expand(lists:reverse(I)))
                     end} || {R, I} <- Tests ]
         end}.
-
 
 -endif.
