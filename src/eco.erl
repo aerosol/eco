@@ -20,7 +20,7 @@
 -export([start/0]).
 -export([initialize/0]).
 
--export([setup/1]).
+-export([setup/1, setup/2]).
 -export([terms/1]).
 -export([term/2, term/3]).
 -export([sub/1]).
@@ -51,7 +51,8 @@
 %%%===================================================================
 
 %% @doc Start the eco application
--spec start() -> {ok, pid()}.
+
+-spec start() -> {ok, pid()} | {error, Reason :: any()}.
 start() ->
     application:start(eco).
 
@@ -59,6 +60,7 @@ start() ->
 %%
 %% This function should be called just once when first time initializing
 %% your working environment.
+
 -spec initialize() -> ok.
 initialize() ->
     eco_app:init_clean().
@@ -68,6 +70,7 @@ initialize() ->
 %% NOTE:
 %% This function initializes configuration server in its basic state.
 %% No file will be loaded unless you do a proper <em>setup/1</em> call.
+
 -spec start_link(binary() | string()) -> {ok, pid()}.
 start_link(ConfigDir) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [ConfigDir], []).
@@ -76,6 +79,7 @@ start_link(ConfigDir) ->
 %%
 %% This function will fail with badarg if there is no snapshot at all,
 %% indicating that configuration has not been initialized.
+
 -spec terms(filename()) -> Terms :: [any()].
 terms(Filename) when is_binary(Filename) ->
     case mnesia:dirty_read({eco_snapshot, Filename}) of
@@ -89,12 +93,14 @@ terms(Filename) ->
 %%
 %% Key is an %% arbitary term.
 %% Returns atom <em>undefined</em> if no value has been found.
+
 -spec term(Key :: any(), Filename :: filename()) -> Term :: term() | undefined.
 term(Key, Filename) ->
     term(Key, Filename, undefined).
 
 %% @doc Same as term/2 except allows to pass the default fallback value
 %% in the third argument.
+
 -spec term(Key :: any(), Filename :: filename(), Default :: term()) -> Term :: term().
 term(Key, Filename, Default) when is_binary(Filename) ->
     case mnesia:dirty_read({eco_kv, {Filename, Key}}) of
@@ -118,6 +124,7 @@ term(Key, Filename, Default) ->
 %% most likely you should alter its state by manually fetching
 %% the configuration values via the <em>term/2,3</em> or %% <em>terms/1</em>
 %% interface.
+
 -spec sub(Filename :: filename()) -> ok.
 sub(Filename) ->
     eco_ps:subscribe(Filename).
@@ -130,28 +137,29 @@ sub(Filename) ->
 %% It may use a custom adapter to parse the configuration file (i.e. JSON, YAML
 %% or whatever format you can support with third party libraries).
 %% Configuration adapter should be provided along with its module definition
-%% within record's <em>adapter</em> field. A custom adapter should
-%% implement and export <em>process_config/1</em> function that will
-%% return <em>{ok, Config}</em> on success.
-%%
-%% Calling <em>setup/1</em> function with <em>#eco_config{}</em> record means
-%% you would like to customize things like key-value enforcement,
-%% adapter or validators.
-%% If you are OK with the provided defaults there is no need to create a record,
-%% as the API will also accept <em>filename()</em> type.
--spec setup(#eco_config{} | filename()) -> ok | {error, Reason :: any()}.
-setup(Eco = #eco_config{}) ->
-    call({setup_config, Eco});
+%% with <em>[adapter, module()]</em> option.
+%% A custom adapter should implement and export <em>process_config/1</em>
+%% function that will return <em>{ok, Config}</em> on success.
+
+-spec setup(Filename :: filename(), Opts :: opts()) ->
+    {ok, Filename :: filename()} | {error, Reason :: any()}.
+setup(Filename, Opts) when is_list(Opts) ->
+    {ok, Eco = #eco_config{}} = parse_opts(Filename, Opts),
+    call({setup_config, Eco}).
+
+-spec setup(Filename :: filename()) ->
+    {ok, Filename :: filename()} | {error, Reason :: any()}.
 setup(Filename) when is_binary(Filename) ->
-    setup(#eco_config{name = Filename});
+    setup(Filename, []);
 setup(Filename) ->
-    setup(to_binary(Filename)).
+    setup(to_binary(Filename), []).
 
 %% @doc Reload previously initialized configuration file.
 %%
 %% This function does all the necessary checks and cleanups.
 %% Current working configuration will be dumped into a file in $CONF/dump/
 %% directory. Dump filename will be extended with current timestamp.
+
 -spec reload(filename() | #eco_config{}) -> ok | {error, Reason :: any()}.
 reload(Filename) ->
     call({reload_config, Filename}).
@@ -177,7 +185,8 @@ handle_call({setup_config,
     Reply = do_trans(Eco,
                     fun() ->
                             eco_ps:init_group(Eco#eco_config.name),
-                            ok = setup_mirror(Eco)
+                            ok = setup_mirror(Eco),
+                            {ok, Name}
                     end),
     {reply, Reply, State};
 handle_call({reload_config, Filename}, _, State = #state{config_dir = Dir})
@@ -216,6 +225,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec parse_opts(filename(), [opt()]) -> {ok, #eco_config{}}.
+parse_opts(Filename, Opts) when is_list(Opts) ->
+    parse_opts2(
+        proplists:unfold(Opts),
+        #eco_config{name = Filename}
+        ).
+
+parse_opts2([], Eco = #eco_config{}) ->
+    {ok, Eco};
+parse_opts2([{adapter, Module}|Rest], Eco = #eco_config{}) ->
+    parse_opts2(Rest, Eco#eco_config{adapter = Module});
+parse_opts2([{force_kv, Bool}|Rest], Eco = #eco_config{})
+        when Bool =:= true; Bool =:= false ->
+    parse_opts2(Rest, Eco#eco_config{force_kv = Bool});
+parse_opts2([Opt|_], _) ->
+    erlang:error({invalid_option, Opt}).
 
 call(Msg) ->
     gen_server:call(?MODULE, Msg).
@@ -361,11 +387,11 @@ u_consult(File) ->
             Error
     end.
 
-%% Slightly modified lib/kernel-2.15.1/src/file.erl
+%% lib/kernel-2.15.1/src/file.erl
 consult_stream(Fd) ->
     consult_stream(Fd, 1, []).
 consult_stream(Fd, Line, Acc) ->
-    case io:read(Fd, Line) of
+    case io:read(Fd, '', Line) of
         {ok,Term,EndLine} ->
             consult_stream(Fd, EndLine, [Term|Acc]);
         {error, Error, Line} ->
