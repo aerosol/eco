@@ -160,9 +160,14 @@ setup(Filename) ->
 %% Current working configuration will be dumped into a file in $CONF/dump/
 %% directory. Dump filename will be extended with current timestamp.
 
--spec reload(filename() | #eco_config{}) -> ok | {error, Reason :: any()}.
+-spec reload(filename() | #eco_config{}) ->
+    {ok, Filename :: filename()} | {error, Reason :: any()}.
+reload(Filename) when is_binary(Filename) ->
+    call({reload_config, Filename});
+reload(#eco_config{name = Filename}) ->
+    reload(Filename);
 reload(Filename) ->
-    call({reload_config, Filename}).
+    reload(to_binary(Filename)).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -179,32 +184,32 @@ handle_call({setup_config,
                     }},
             _, State = #state{ config_dir = Dir }) ->
     Eco = E#eco_config{
-                    name = to_binary(Name),
-                    config_path = make_path({Dir, Name})
-                },
-    Reply = do_trans(Eco,
-                    fun() ->
-                            eco_ps:init_group(Eco#eco_config.name),
-                            ok = setup_mirror(Eco),
-                            {ok, Name}
-                    end),
+            name = to_binary(Name),
+            config_path = make_path({Dir, Name})
+            },
+    Reply = do_trans(Name,
+                     fun() ->
+                        eco_ps:init_group(Eco#eco_config.name),
+                        ok = setup_mirror(Eco),
+                        {ok, Name}
+                     end),
     {reply, Reply, State};
 handle_call({reload_config, Filename}, _, State = #state{config_dir = Dir})
         when is_binary(Filename) ->
-    Reply = do_trans(
-                fun() ->
-                    case mnesia:read(eco_config, Filename) of
-                        [#eco_config{} = Eco] ->
-                            ok = dump_current(Eco, Dir),
-                            ok = clear_kvs(Eco),
-                            ok = setup_mirror(Eco),
-                            ok = eco_ps:publish(Filename,
-                                                {eco_reload, Filename});
-                        [] ->
-                            mnesia:abort({not_initialized, Filename})
-                    end
-                end
-                ),
+    Reply = do_trans(Filename,
+                     fun() ->
+                        case mnesia:read(eco_config, Filename) of
+                            [#eco_config{} = Eco] ->
+                                ok = dump_current(Filename, Dir),
+                                ok = clear_kvs(Eco),
+                                ok = setup_mirror(Eco),
+                                ok = eco_ps:publish(Filename,
+                                                    {eco_reload, Filename}),
+                                {ok, Filename};
+                            [] ->
+                                mnesia:abort({not_initialized, Filename})
+                        end
+            end),
     {reply, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -226,6 +231,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+call(Msg) ->
+    gen_server:call(?MODULE, Msg).
+
 -spec parse_opts(filename(), [opt()]) -> {ok, #eco_config{}}.
 parse_opts(Filename, Opts) when is_list(Opts) ->
     parse_opts2(
@@ -242,9 +250,6 @@ parse_opts2([{force_kv, Bool}|Rest], Eco = #eco_config{})
     parse_opts2(Rest, Eco#eco_config{force_kv = Bool});
 parse_opts2([Opt|_], _) ->
     erlang:error({invalid_option, Opt}).
-
-call(Msg) ->
-    gen_server:call(?MODULE, Msg).
 
 -spec ensure_dump_dir(binary()) ->
     {ok, binary()} | {error, {binary(), eacces | eexist | enoent | enospc | enotdir}}.
@@ -270,20 +275,20 @@ format_time({{Y,M,D},{H,Min,S}}) ->
     io_lib:format("~4.10.0B_~2.10.0B_~2.10.0B_~2.10.0B_~2.10.0B_~2.10.0B",
     [Y, M, D, H, Min, S]).
 
--spec dump_current(#eco_config{}, binary()) ->
+-spec dump_current(filename(), binary()) ->
     ok | {error, enoent | enotdir | enospc | eacces | eisdir}.
-dump_current(Eco = #eco_config{}, ConfigDir) ->
-    {ok, #eco_snapshot{name = Name, raw = Raw}} = find_snapshot(Eco),
+dump_current(Name, ConfigDir) ->
+    {ok, #eco_snapshot{name = Name, raw = Raw}} = find_snapshot(Name),
     {ok, DumpDir} = ensure_dump_dir(ConfigDir),
     {ok, DumpFname} = make_dump_name(Name),
     Fname = filename:join(DumpDir, DumpFname),
     file:write_file(Fname, Raw).
 
--spec find_snapshot(#eco_config{}) -> {ok, #eco_snapshot{}} | undefined.
-find_snapshot(#eco_config{ name = Name }) ->
+-spec find_snapshot(filename()) -> {ok, #eco_snapshot{}} | undefined.
+find_snapshot(Filename) ->
     case mnesia:transaction(
             fun() ->
-                    mnesia:read(eco_snapshot, Name)
+                    mnesia:read(eco_snapshot, Filename)
             end) of
         {atomic, [Snapshot]} ->
             {ok, Snapshot};
@@ -292,24 +297,20 @@ find_snapshot(#eco_config{ name = Name }) ->
             undefined
     end.
 
--spec do_trans(#eco_config{}, function()) -> ok | {error, any()}.
-do_trans(Eco = #eco_config{}, Transaction) when is_function(Transaction) ->
-    case mnesia:transaction(Transaction) of
-        {aborted, Reason} ->
-            eco_fallback:handle(Eco, Reason);
-        {atomic, ok} ->
-            ok
-    end.
--spec do_trans(function()) -> ok | {error, {aborted, any()}}.
-do_trans(Transaction) when is_function(Transaction) ->
-    case mnesia:transaction(Transaction) of
-        {aborted, Reason} ->
-            {error, {aborted, Reason}};
-        {atomic, ok} ->
-             ok
-     end.
 
--spec make_path({binary() | string(),binary() | [byte()]}) -> binary() | string().
+
+-spec do_trans(Subject :: filename(), Transaction :: function()) ->
+    {ok, any()} | {error, any()}.
+do_trans(Filename, Transaction) when is_function(Transaction) ->
+    case mnesia:transaction(Transaction) of
+        {aborted, Reason} ->
+            eco_fallback:handle(Filename, Reason);
+        {atomic, {ok, Result}} ->
+            {ok, Result}
+    end.
+
+-spec make_path({binary() | string(),binary() | [byte()]}) ->
+    binary() | string().
 make_path({Dir, Name}) ->
     filename:join([Dir, Name]).
 
@@ -333,7 +334,7 @@ setup_mirror(#eco_config{name = Filename, config_path = CP,
 
 -spec clear_kvs(#eco_config{}) -> ok | {error, any()}.
 clear_kvs(#eco_config{name = Filename}) ->
-    {atomic, KVs} = mnesia:match_object({eco_kv, {Filename, '_'}, '_'}),
+    KVs = mnesia:match_object({eco_kv, {Filename, '_'}, '_'}),
     _ = [ mnesia:delete_object(Obj) || Obj <- KVs ],
     ok.
 
