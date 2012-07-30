@@ -33,7 +33,7 @@
             commands = []
         }).
 
--define(PROMPT, <<"eco $ ">>).
+-define(PROMPT, "eco $ ").
 -define(CACHE, eco_shell_commands).
 
 %%%===================================================================
@@ -51,15 +51,14 @@ register_module(Mod) when is_atom(Mod) ->
 %%%===================================================================
 
 init([]) ->
-    ok = eco:setup(<<"eco_shell.conf">>),
-    Port = eco:term(ssh_port, <<"eco_shell.conf">>, 2222),
-    SysDir = eco:term(ssh_sys_dir, <<"eco_shell.conf">>, "priv/ssh-sys"),
-    UserDir = eco:term(ssh_user_dir, <<"eco_shell.conf">>, "priv/ssh-usr"),
+    {ok, F} = eco:setup(<<"eco_shell.conf">>),
+    Port = eco:term(ssh_port, F, 2222),
+    SysDir = eco:term(ssh_sys_dir, F, "priv/ssh-sys"),
+    UserDir = eco:term(ssh_user_dir, F, "priv/ssh-usr"),
     {ok, Ref} = ssh:daemon(Port, [{system_dir, SysDir},
-                            {user_dir, UserDir},
-                            {shell, fun() ->
-                            spawn(fun start_shell/0)
-                    end } ]),
+                                  {user_dir, UserDir},
+                                  {shell, fun start_shell/0}
+                                 ]),
     initialize_cache(),
     register_module(eco_shell_std),
     {ok, #state{
@@ -104,11 +103,16 @@ extract_commands({Module, [_|Rest]}, Acc) ->
     extract_commands({Module, Rest}, Acc).
 
 start_shell() ->
-    io:setopts([{expand_fun, fun expand/1}]),
-    shell_loop().
+    spawn(fun() ->
+                ok = io:setopts([{expand_fun, fun expand/1}]),
+                _ = shell_loop()
+        end).
 
 shell_loop() ->
     case get_input(?PROMPT) of
+        Quit when Quit =:= "exit"; Quit =:= "quit" ->
+            io:format("Bye!~n"),
+            {ok, exit};
         Cmd ->
             io:format("Unknown command: ~p~n", [Cmd]),
             shell_loop()
