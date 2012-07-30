@@ -52,8 +52,8 @@ init_clean() ->
     ok.
 
 start(_StartType, StartArgs) ->
-    application:start(pg2),
-    application:start(mnesia),
+    _ = application:start(pg2),
+    _ = application:start(mnesia),
     case mnesia:wait_for_tables([eco_snapshot, eco_kv], 5000) of
         ok ->
             ConfigDir = proplists:get_value(config_dir, StartArgs),
@@ -76,7 +76,7 @@ get_plugins(StartArgs) ->
                         try
                             erlang:list_to_existing_atom(Plugin)
                         catch error:badarg ->
-                            unknown_plugin(Plugin)
+                            erlang:error({unknown_eco_plugin, Plugin})
                         end
                 end, Plugins);
         error ->
@@ -86,16 +86,13 @@ get_plugins(StartArgs) ->
 start_plugins([]) ->
     ok;
 start_plugins([shell|Rest]) ->
-    application:start(crypto),
-    application:start(public_key),
-    application:start(ssh),
-    eco_sup:start_shell(),
+    _ = application:start(crypto),
+    _ = application:start(public_key),
+    _ = application:start(ssh),
+    {ok, _} = eco_sup:start_shell(),
     start_plugins(Rest);
 start_plugins([Unknown|_]) ->
-    unknown_plugin(Unknown).
-
-unknown_plugin(Plugin) ->
-    erlang:error({unknown_eco_plugin, Plugin}).
+    erlang:error({unknown_eco_plugin, Unknown}).
 
 stop(_State) ->
     ok.
