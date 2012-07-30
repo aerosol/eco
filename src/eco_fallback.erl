@@ -18,6 +18,14 @@
 -include("eco.hrl").
 -export([handle/2]).
 
+%% @doc Try explain the error to the user and run configuration fallback if possible.
+%%
+%% This functions tries to find human-readable error explanation and seeks
+%% for previous configuration snapshot in the mnesia database.
+%% If snapshot is found it is used producing a log info message, if not -
+%% the function fails with the original reason.
+
+-spec handle(#eco_config{}, Reason :: any()) -> ok | {error, Reason :: any()}.
 handle(Eco = #eco_config{ config_path = CP}, Reason) ->
     try_explain(Eco, Reason),
     case eco:find_snapshot(Eco) of
