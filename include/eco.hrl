@@ -2,7 +2,9 @@
 -type filename()     :: binary() | string().
 -type config_dir()   :: binary() | string().
 -type adapter()      :: module() | function() | {module(), atom()}.
--type user_opt()     :: {sub, msg} | {sub, function()} | nosub.
+
+-type opt()  :: force_kv | {force_kv, boolean()} | {adapter, adapter()}.
+-type opts() :: [opt()] | [].
 
 -record(eco_config, {
         name                    :: filename(),
