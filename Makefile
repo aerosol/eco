@@ -16,7 +16,7 @@ clean:
 
 build-plt:
 	@$(DIALYZER) --build_plt --output_plt .$(PROJECT).plt \
-		--apps kernel stdlib sasl tools inets crypto public_key ssl mnesia
+		--apps kernel stdlib sasl tools inets crypto public_key ssl mnesia ssh
 
 dialyze:
 	@$(DIALYZER) --src src --plt .$(PROJECT).plt --no_native \
