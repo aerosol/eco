@@ -9,8 +9,6 @@
 %% Supervisor callbacks
 -export([init/1]).
 
--include("eco.hrl").
-
 %% ===================================================================
 %% API functions
 %% ===================================================================
@@ -23,11 +21,6 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    F = <<"example.conf">>,
-    ok = eco:setup(#eco_config{
-                name = F,
-                force_kv = true
-                }),
     {ok, { {one_for_one, 5, 10}, [
                 {eco_example_client,
                  {eco_example_client, start_link, []},

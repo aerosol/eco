@@ -30,9 +30,10 @@ start_link() ->
 %%%===================================================================
 
 init([]) ->
-    User = eco:term(username, <<"example.conf">>, <<"Anonymous">>),
-    Pass = eco:term(password, <<"example.conf">>),
-    ok = eco:sub(<<"example.conf">>),
+    {ok, F} = eco:setup(<<"example.conf">>, [force_kv]),
+    User = eco:term(username, F, <<"Anonymous">>),
+    Pass = eco:term(password, F),
+    ok = eco:sub(F),
     io:format("Starting example server (~p).~n"
               "Credentials read from 'conf/example.conf':"
               "U: ~p P: ~p~n", [self(), User, Pass]),
