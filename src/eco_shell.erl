@@ -93,6 +93,8 @@ code_change(_OldVsn, State, _Extra) ->
 initialize_cache() ->
     ?CACHE = ets:new(?CACHE, [ordered_set, named_table, protected]).
 
+%% @doc Loop over all exported functions (except for module_info)
+%% and build map of {Module :: string(), {Function :: atom(), Module :: module()}}
 extract_commands(Module) when is_atom(Module) ->
     {module, Module} = code:ensure_loaded(Module),
     extract_commands({Module, Module:module_info(exports)}, []).
@@ -103,12 +105,14 @@ extract_commands({Module, [{Fun, 1}|Rest]}, Acc) when Fun =/= module_info ->
 extract_commands({Module, [_|Rest]}, Acc) ->
     extract_commands({Module, Rest}, Acc).
 
+%% @doc Spawn REPL loop
 start_shell() ->
     spawn(fun() ->
                 ok = io:setopts([{expand_fun, fun expand/1}]),
                 _ = shell_loop()
         end).
 
+%% @doc REPL loop
 shell_loop() ->
     case get_input(?PROMPT) of
         Quit when Quit =:= "exit"; Quit =:= "quit" ->
@@ -154,43 +158,57 @@ find_commands_by_prefix(Prefix) ->
         [] -> []
     end.
 
+%% @doc Return completion suggestions to SSH shell (ssh_cli)
 suggest([], _) ->
     {no, "", []};
-suggest([One], Pref) when is_list(One) ->
-    {yes, lists:flatten([One--Pref, " "]), []};
+suggest([One], {Prefix, _}) when is_list(One) ->
+    {yes, lists:flatten([One--Prefix, " "]), []};
+suggest([One], {_, {Bpref, BprefS}}) when is_binary(One) ->
+    <<Bpref:BprefS/binary, Suffix/binary>> = One,
+    {yes, Suffix, []};
 suggest(Multiple, _) when is_list(Multiple) ->
     {yes, "", Multiple}.
 
-expand({full, [], Pref, 0}) ->
-    suggest(find_commands_by_prefix(Pref), Pref);
-expand({full, Cmd, Pref, Argv}) ->
+%% @doc Try to find matching commands or parameters
+expand({full, [], Prefix, 0}) ->
+    suggest(find_commands_by_prefix(Prefix), {Prefix, ignore});
+expand({full, Cmd, Prefix, Argv}) ->
     [{_, {Fun, Mod}}] = ets:lookup(?CACHE, Cmd),
     try
+        %% allow Mod:Fun({completions, _}) to return binaries as well
+        Bpref = erlang:list_to_binary(Prefix),
+        BprefS = erlang:byte_size(Bpref),
+
+        %% get all available completions
         Completions = Mod:Fun({completions, Argv}),
+
+        %% find matching and suggest matching completions
         Matching = lists:filter(
-            fun(Arg) ->
-                lists:prefix(Pref, Arg)
+            fun(Arg) when is_list(Arg) ->
+                    lists:prefix(Prefix, Arg);
+               (<<B:BprefS/binary, _/binary>>) when B =:= Bpref ->
+                    true
             end,
             Completions),
-        suggest(Matching, Pref)
+        suggest(Matching, {Prefix, {Bpref, BprefS}})
     catch error:E when E =:= function_clause; E =:= undef ->
-            suggest([], [])
+        suggest([], {[], ignore})
     end;
 expand({args, Cmd, Prefix, Argv}) ->
     expand({full, lists:reverse(Cmd), lists:reverse(Prefix), Argv});
 expand({partial, [" ", Cmd]}) when is_list(Cmd) ->
     expand({args, Cmd, "", 1});
-expand({partial, [Pref, Cmd]}) when is_list(Cmd) ->
-    expand({args, Cmd, Pref, 1});
+expand({partial, [Prefix, Cmd]}) when is_list(Cmd) ->
+    expand({args, Cmd, Prefix, 1});
 expand({partial, [Cmd]}) when is_list(Cmd) ->
     expand({args, "", Cmd, 0});
-expand({partial, [Pref|L]}) when is_list(Pref) ->
+expand({partial, [Prefix|L]}) when is_list(Prefix) ->
     Cmd = hd(lists:reverse(L)),
-    expand({args, Cmd, Pref, length(L)});
+    expand({args, Cmd, Prefix, length(L)});
 expand(" " ++ Cmd) when is_list(Cmd) ->
     expand({partial, [" " | string:tokens(Cmd, " ")]});
 expand([]) ->
-    suggest(find_commands_by_prefix(""), "");
+    suggest(find_commands_by_prefix(""), {"", ignore});
 expand(Cmd) when is_list(Cmd) ->
     expand({partial, string:tokens(Cmd, " ")}).
 
