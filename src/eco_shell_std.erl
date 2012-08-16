@@ -6,10 +6,12 @@ reload(help) ->
     {reply, <<"Reload configuration.">>};
 
 reload({completions, 1}) ->
-    [ binary_to_list(X) || X <- eco:names() ];
+    %eco:names();
+    ["elo", <<"jelo">>];
 
 reload([Filename]) ->
     eco:reload(Filename);
+
 reload([_, _]) ->
     erlang:error(wussup).
 
@@ -17,3 +19,4 @@ hi([Name]) ->
     io_lib:format("hi ~s", [Name]);
 hi({completions, 1}) ->
     ["adam"].
+

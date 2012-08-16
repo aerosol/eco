@@ -175,7 +175,9 @@ setup(Filename) ->
 %% directory. Dump filename will be extended with current timestamp.
 
 -spec reload(filename() | #eco_config{}) ->
-    {ok, Filename :: filename()} | {error, Reason :: any()}.
+    {ok, Filename :: filename()} |
+    {fallback, {snapshot, calendar:datetime()}, {reason, any()}} |
+    {error, Reason :: any()}.
 reload(Filename) when is_binary(Filename) ->
     call({reload_config, Filename});
 reload(#eco_config{name = Filename}) ->
@@ -360,7 +362,7 @@ setup_mirror(#eco_config{name = Filename, config_path = CP,
             raw         = Raw,
             terms       = Terms
             }),
-    case Terms of
+    _ = case Terms of
         T when is_list(T) ->
             _ = [ mnesia:write(#eco_kv{
                         key = Key,
@@ -405,13 +407,17 @@ ensure_file_ok(CP) ->
     end.
 
 -spec load_config(A :: adapter(), CP :: config_path(),
-    V :: validators(), FKV :: boolean()) -> {ok, {binary(), term()}}.
+    V :: validators(), FKV :: boolean()) -> {ok, {binary(), term()} | {error, any()}}.
 load_config(A, CP, V, FKV) ->
     {ok, Raw} = file:read_file(CP),
     {ok, Terms} = load_config2(A, CP),
-    {ok, ValidTerms} = validate(Terms, V),
-    NewTerms = maybe_kv_check(ValidTerms, FKV),
-    {ok, {Raw, NewTerms}}.
+    case validate(Terms, V) of
+        {ok, ValidTerms} ->
+            NewTerms = maybe_kv_check(ValidTerms, FKV),
+            {ok, {Raw, NewTerms}};
+        Error ->
+            {error, Error}
+    end.
 
 -spec load_config2(adapter(), config_path()) -> {ok, term()}.
 load_config2(native, File) ->
@@ -428,14 +434,20 @@ load_config2(Custom, File) ->
 validate(Terms, []) -> {ok, Terms};
 validate(Terms, Vs) when is_list(Vs) ->
     {ok, lists:foldl(
-            fun ({M,F}, NT) ->
-                    {ok, NT2} = M:F(NT),
-                    NT2;
-                (V, NT) ->
-                    {ok, NT2} = V(NT),
-                    NT2
+            fun(Validator, NT) ->
+                case f_call(Validator, NT) of
+                    {ok, NT2} ->
+                        NT2;
+                    Error ->
+                        erlang:error({validation_error, Error})
+                end
             end,
             Terms, Vs)}.
+
+f_call({M, F}, A) ->
+    erlang:apply({M,F,A});
+f_call(F, A) when is_function(F) ->
+    F(A).
 
 %% @doc Same as file:consult/1 except reads unicode
 -spec u_consult(config_path()) -> {ok, term()} | {error, any()}.

@@ -160,13 +160,18 @@ find_commands_by_prefix(Prefix) ->
 
 %% @doc Return completion suggestions to SSH shell (ssh_cli)
 suggest([], _) ->
+    io:format("S: ~p~n", [[]]),
     {no, "", []};
 suggest([One], {Prefix, _}) when is_list(One) ->
+    io:format("S: ~p~n", [One--Prefix]),
     {yes, lists:flatten([One--Prefix, " "]), []};
 suggest([One], {_, {Bpref, BprefS}}) when is_binary(One) ->
     <<Bpref:BprefS/binary, Suffix/binary>> = One,
+    io:format("S: ~p~n", [Suffix]),
     {yes, Suffix, []};
 suggest(Multiple, _) when is_list(Multiple) ->
+    %% FIXME cannot return binaries, aaargh!
+    io:format("S/M: ~p~n", [Multiple]),
     {yes, "", Multiple}.
 
 %% @doc Try to find matching commands or parameters
@@ -182,16 +187,19 @@ expand({full, Cmd, Prefix, Argv}) ->
         %% get all available completions
         Completions = Mod:Fun({completions, Argv}),
 
+        io:format("bprefix: ~p (~p)~n", [Bpref, BprefS]),
+
         %% find matching and suggest matching completions
         Matching = lists:filter(
-            fun(Arg) when is_list(Arg) ->
-                    lists:prefix(Prefix, Arg);
-               (<<B:BprefS/binary, _/binary>>) when B =:= Bpref ->
-                    true
+            fun(Arg) when is_list(Arg) -> lists:prefix(Prefix, Arg);
+               (<<B:BprefS/binary, _/binary>>) when B =:= Bpref -> true;
+               (_) -> false
             end,
             Completions),
+        io:format("Matching ~p~n", [Matching]),
         suggest(Matching, {Prefix, {Bpref, BprefS}})
-    catch error:E when E =:= function_clause; E =:= undef ->
+    catch error:E when E =:= undef ->
+        io:format("Error ~p~n", [E]),
         suggest([], {[], ignore})
     end;
 expand({args, Cmd, Prefix, Argv}) ->

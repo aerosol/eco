@@ -25,13 +25,14 @@
 %% If snapshot is found it is used producing a log info message, if not -
 %% the function fails with the original reason.
 
--spec handle(Filename :: filename(), Reason :: any()) -> ok | {error, Reason :: any()}.
+-spec handle(Filename :: filename(), Reason :: any()) ->
+    {fallback, {snapshot, calendar:datetime()}, {reason, any()}} | {error, Reason :: any()}.
 handle(Filename, Reason) ->
     try_explain(Filename, Reason),
     case eco:find_snapshot(Filename) of
         {ok, #eco_snapshot{timestamp = TS}} ->
             error_logger:info_msg("Falling back to configuration snapshot from ~p~n", [TS]),
-            {ok, {fallback, TS}};
+            {fallback, {snapshot, TS}, {reason, Reason}};
         undefined ->
             error_logger:error_msg("Could not find any previous configuration"
                                    " snapshot for '~s'~n", [Filename]),
@@ -39,6 +40,8 @@ handle(Filename, Reason) ->
     end.
 
 -spec try_explain(filename(), term()) -> ok.
+try_explain(Filename, {{validation_error, Reason}, _Stacktrace}) ->
+    error_logger:error_msg("Configuration data in '~s' did not validate: ~p~n", [Filename, Reason]);
 try_explain(Filename, {{_, {error,{L1, erl_parse, E}, L2}}, _}) ->
     error_logger:error_msg("Error processing configuration file '~s'. ~n"
                            "Corrupted term is close to lines ~p or ~p. ~n"
