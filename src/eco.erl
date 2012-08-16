@@ -177,7 +177,10 @@ reload(Filename) ->
 %% @doc Fetch list of config filenames that were set up
 -spec names() -> [filename()].
 names() ->
-    call(names).
+    %% foldl would be just enough; leaving the gate open with qlc
+    do_qlc(
+        qlc:q([ Eco#eco_config.name || Eco <- mnesia:table(eco_config) ])
+    ).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -223,10 +226,6 @@ handle_call({reload_config, Filename}, _, State = #state{config_dir = Dir})
             end),
     {reply, Reply, State};
 
-handle_call(names, _From, State) ->
-    Names = fetch_names(),
-    {reply, Names, State};
-
 handle_call(_Request, _From, State) ->
     Reply = unknown_call,
     {reply, Reply, State}.
@@ -249,13 +248,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 call(Msg) ->
     gen_server:call(?MODULE, Msg).
-
--spec fetch_names() -> [filename()].
-fetch_names() ->
-    %% foldl would be just enough; leaving the gate open with qlc
-    do_qlc(
-        qlc:q([ Eco#eco_config.name || Eco <- mnesia:table(eco_config) ])
-    ).
 
 -spec parse_opts(filename(), [opt()]) -> {ok, #eco_config{}}.
 parse_opts(Filename, Opts) when is_list(Opts) ->
@@ -403,7 +395,7 @@ load_config2({Mod, Fun}, File) ->
 load_config2(Custom, File) ->
     Custom:process_config(File).
 
-%% Same as file:consult/1 except reads unicode
+%% @doc Same as file:consult/1 except reads unicode
 -spec u_consult(config_path()) -> {ok, term()} | {error, any()}.
 u_consult(File) ->
     case file:open(File, [read, {encoding, unicode}]) of
@@ -415,7 +407,7 @@ u_consult(File) ->
             Error
     end.
 
-%% lib/kernel-2.15.1/src/file.erl
+%% @doc lib/kernel-2.15.1/src/file.erl
 consult_stream(Fd) ->
     consult_stream(Fd, 1, []).
 consult_stream(Fd, Line, Acc) ->
@@ -432,3 +424,8 @@ consult_stream(Fd, Line, Acc) ->
 to_binary(B) when is_binary(B) -> B;
 to_binary(L) when is_list(L) -> iolist_to_binary(L).
 
+%% @doc Calculate CRC of erlang binary term
+%-spec make_checksum(list()) -> {ok, integer()}.
+%make_checksum(L) ->
+    %Sum = erlang:crc32(erlang:term_to_binary(L)),
+    %{ok, Sum}.
