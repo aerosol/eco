@@ -25,6 +25,7 @@
 -export([term/2, term/3]).
 -export([sub/1]).
 -export([reload/1]).
+-export([names/0]).
 
 %% gen_server API
 -export([start_link/1]).
@@ -60,6 +61,10 @@ start() ->
 %%
 %% This function should be called just once when first time initializing
 %% your working environment.
+%%
+%% You can use the commandline switch <em>-eco_auto_init true</em>, so
+%% eco will try to figure out if the schema has not been initialized
+%% and make this call internally for you.
 
 -spec initialize() -> ok.
 initialize() ->
@@ -169,6 +174,11 @@ reload(#eco_config{name = Filename}) ->
 reload(Filename) ->
     reload(to_binary(Filename)).
 
+%% @doc Fetch list of config filenames that were set up
+-spec names() -> [filename()].
+names() ->
+    call(names).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -194,6 +204,7 @@ handle_call({setup_config,
                         {ok, Name}
                      end),
     {reply, Reply, State};
+
 handle_call({reload_config, Filename}, _, State = #state{config_dir = Dir})
         when is_binary(Filename) ->
     Reply = do_trans(Filename,
@@ -211,8 +222,13 @@ handle_call({reload_config, Filename}, _, State = #state{config_dir = Dir})
                         end
             end),
     {reply, Reply, State};
+
+handle_call(names, _From, State) ->
+    Names = fetch_names(),
+    {reply, Names, State};
+
 handle_call(_Request, _From, State) ->
-    Reply = ok,
+    Reply = unknown_call,
     {reply, Reply, State}.
 
 handle_cast(_Msg, State) ->
@@ -233,6 +249,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 call(Msg) ->
     gen_server:call(?MODULE, Msg).
+
+-spec fetch_names() -> [filename()].
+fetch_names() ->
+    %% foldl would be just enough; leaving the gate open with qlc
+    do_qlc(
+        qlc:q([ Eco#eco_config.name || Eco <- mnesia:table(eco_config) ])
+    ).
 
 -spec parse_opts(filename(), [opt()]) -> {ok, #eco_config{}}.
 parse_opts(Filename, Opts) when is_list(Opts) ->
@@ -297,8 +320,6 @@ find_snapshot(Filename) ->
             undefined
     end.
 
-
-
 -spec do_trans(Subject :: filename(), Transaction :: function()) ->
     {ok, any()} | {error, any()}.
 do_trans(Filename, Transaction) when is_function(Transaction) ->
@@ -308,6 +329,12 @@ do_trans(Filename, Transaction) when is_function(Transaction) ->
         {atomic, {ok, Result}} ->
             {ok, Result}
     end.
+
+-spec do_qlc(QLC :: qlc:query_list_comprehension()) -> any().
+do_qlc(QLC) ->
+    F = fun() -> qlc:e(QLC) end,
+    {atomic, Val} = mnesia:transaction(F),
+    Val.
 
 -spec make_path({binary() | string(),binary() | [byte()]}) ->
     binary() | string().
