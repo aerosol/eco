@@ -263,6 +263,13 @@ parse_opts2([{adapter, Module}|Rest], Eco = #eco_config{}) ->
 parse_opts2([{force_kv, Bool}|Rest], Eco = #eco_config{})
         when Bool =:= true; Bool =:= false ->
     parse_opts2(Rest, Eco#eco_config{force_kv = Bool});
+parse_opts2([{validators, Validators}|Rest], Eco = #eco_config{}) ->
+    %% I couldn not find any reliable way to validate the validators,
+    %% since you can do F = fun erlang:nonexisting/1 and fun_info
+    %% doesn't complain then. Late bindings FTW.
+    %% We'll crash anyway, but wanted to do this earlier with
+    %% user-friendly error message.
+    parse_opts2(Rest, Eco#eco_config{validators = Validators});
 parse_opts2([Opt|_], _) ->
     erlang:error({invalid_option, Opt}).
 
@@ -335,19 +342,26 @@ make_path({Dir, Name}) ->
 
 -spec setup_mirror(#eco_config{}) -> ok | {error, any()}.
 setup_mirror(#eco_config{name = Filename, config_path = CP,
-                         adapter = A, force_kv = FKV} = Eco) ->
+                         adapter = A, force_kv = FKV, validators = V} = Eco) ->
     {ok, _} = ensure_file_ok(CP),
-    {ok, {Raw, Terms}} = load_config(A, CP),
+    {ok, {Raw, Terms}} = load_config(A, CP, V, FKV),
     mnesia:write(#eco_snapshot{
             name        = Filename,
             timestamp   = erlang:localtime(),
             raw         = Raw,
-            terms       = kv_check(Terms, FKV)
+            terms       = Terms
             }),
-    _ = [ mnesia:write(#eco_kv{
-                key = K,
-                value = V
-                }) || {K, V} <- kv_unfold(Filename, Terms) ],
+    case Terms of
+        T when is_list(T) ->
+            _ = [ mnesia:write(#eco_kv{
+                        key = Key,
+                        value = Val
+                        }) || {Key, Val} <- kv_unfold(Filename, T) ];
+        _ ->
+            error_logger:warning_msg("Configuration in '~s' eventually does not appear to be a list.~n"
+                                     "Warning! eco:term/2 interface will not work as expected!~n", [Filename]),
+            ignore
+    end,
     mnesia:write(Eco),
     ok.
 
@@ -363,12 +377,14 @@ kv_unfold(Filename, List) ->
             (Else) -> {{Filename, Else}, true}
         end, List).
 
--spec kv_check(term(), boolean()) -> term().
-kv_check(Terms, false) -> Terms;
-kv_check(Terms, true) ->
+-spec maybe_kv_check(term(), boolean()) -> term().
+maybe_kv_check(Terms, false) -> Terms;
+maybe_kv_check(Terms, true) when is_list(Terms) ->
     lists:map(fun({K,V}) -> {K,V};
             (T) -> erlang:error({kv_expected, T})
-        end, Terms).
+        end, Terms);
+maybe_kv_check(Terms, true) ->
+    erlang:error({kv_expected, Terms}).
 
 -spec ensure_file_ok(config_path()) ->
     {ok, config_path()} | {error, {not_regular_file, config_path()}}.
@@ -379,11 +395,14 @@ ensure_file_ok(CP) ->
             {error, {not_regular_file, CP}}
     end.
 
--spec load_config(adapter(), config_path()) -> {ok, {binary(), term()}}.
-load_config(Adapter, CP) ->
+-spec load_config(A :: adapter(), CP :: config_path(),
+    V :: validators(), FKV :: boolean()) -> {ok, {binary(), term()}}.
+load_config(A, CP, V, FKV) ->
     {ok, Raw} = file:read_file(CP),
-    {ok, Terms} = load_config2(Adapter, CP),
-    {ok, {Raw, Terms}}.
+    {ok, Terms} = load_config2(A, CP),
+    {ok, ValidTerms} = validate(Terms, V),
+    NewTerms = maybe_kv_check(ValidTerms, FKV),
+    {ok, {Raw, NewTerms}}.
 
 -spec load_config2(adapter(), config_path()) -> {ok, term()}.
 load_config2(native, File) ->
@@ -394,6 +413,20 @@ load_config2({Mod, Fun}, File) ->
     Mod:Fun(File);
 load_config2(Custom, File) ->
     Custom:process_config(File).
+
+-spec validate(Terms :: [any()], Vs :: validators()) ->
+    {ok, [any()]} | {error, {validation_error, any()}}.
+validate(Terms, []) -> {ok, Terms};
+validate(Terms, Vs) when is_list(Vs) ->
+    {ok, lists:foldl(
+            fun ({M,F}, NT) ->
+                    {ok, NT2} = M:F(NT),
+                    NT2;
+                (V, NT) ->
+                    {ok, NT2} = V(NT),
+                    NT2
+            end,
+            Terms, Vs)}.
 
 %% @doc Same as file:consult/1 except reads unicode
 -spec u_consult(config_path()) -> {ok, term()} | {error, any()}.
