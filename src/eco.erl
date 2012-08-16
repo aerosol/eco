@@ -145,6 +145,15 @@ sub(Filename) ->
 %% with <em>[adapter, module()]</em> option.
 %% A custom adapter should implement and export <em>process_config/1</em>
 %% function that will return <em>{ok, Config}</em> on success.
+%%
+%% You may validate/transform your config on-the-fly using the <em>validators</em>
+%% option. It accepts a list of functions in the form of funs or {M,F}.
+%% Validation functions are expected to accept only one argument (Terms) and
+%% return either {ok, Terms} (data checkers) or {ok, NewTerms} (transformers).
+%% The validation functions will be called in the order they were provided,
+%% passing the result from current to the latter (function chain).
+%% To report a validation error, the validator function should return anything
+%% that does not match the pattern of {ok, any()} or terminate abnormally.
 
 -spec setup(Filename :: filename(), Opts :: opts()) ->
     {ok, Filename :: filename()} | {error, Reason :: any()}.
