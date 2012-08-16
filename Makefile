@@ -23,12 +23,12 @@ dialyze:
 		-Werror_handling -Wrace_conditions -Wunmatched_returns # -Wunderspecs
 
 run: app
-	erl -pa ebin -boot start_sasl -s eco -eco_plugins shell
+	erl -pa ebin -boot start_sasl -s eco -eco_plugins shell -eco_auto_init true
 
 example: clean app
 	rm -rf Mnesia.example*
 	ls
-	erl -pa ebin -boot start_sasl -sname example -s eco_example
+	erl -pa ebin -boot start_sasl -sname example -s eco_example -eco_plugins shell -eco_auto_init true
 
 docs: clean-docs
 	@$(REBAR) doc skip_deps=true
