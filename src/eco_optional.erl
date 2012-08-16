@@ -36,12 +36,14 @@ walk_ast([{attribute, Line, require, Deps}=H|T], Acc) ->
         {error, {Dep, Err}} ->
             Warn = {warning,{Line, eco_optional, {deps_missing, get(mod), Dep, Err}}},
             walk_ast(T, [Warn|Acc]);
-        _ ->
+        ok ->
             walk_ast(T, [H|Acc])
     end;
 walk_ast([H|T], Acc) ->
     walk_ast(T, [H|Acc]).
 
+ensure_loaded([]) ->
+    ok;
 ensure_loaded([Dep|Rest]) ->
     case code:ensure_loaded(Dep) of
         {module, Dep} ->

@@ -322,7 +322,7 @@ do_trans(Filename, Transaction) when is_function(Transaction) ->
             {ok, Result}
     end.
 
--spec do_qlc(QLC :: qlc:query_list_comprehension()) -> any().
+-spec do_qlc(QLC :: term()) -> any().
 do_qlc(QLC) ->
     F = fun() -> qlc:e(QLC) end,
     {atomic, Val} = mnesia:transaction(F),
