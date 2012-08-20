@@ -6,8 +6,7 @@ reload(help) ->
     {reply, <<"Reload configuration.">>};
 
 reload({completions, 1}) ->
-    %eco:names();
-    ["elo", <<"jelo">>];
+    [ binary_to_list(X) || X <- eco:names() ];
 
 reload([Filename]) ->
     eco:reload(Filename);

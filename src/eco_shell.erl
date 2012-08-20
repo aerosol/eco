@@ -152,7 +152,7 @@ get_command(Command) ->
     ets:lookup(?CACHE, Command).
 
 find_commands_by_prefix(Prefix) ->
-    case ets:match_object(?CACHE, {Prefix++'_', '_'}) of
+    case ets:match_object(?CACHE, {Prefix ++ '_', '_'}) of
         [ {_,_}, _|_ ] = Commands -> [ C || {C, _} <- Commands ];
         [ {C, _} ] -> [C];
         [] -> []
@@ -160,47 +160,27 @@ find_commands_by_prefix(Prefix) ->
 
 %% @doc Return completion suggestions to SSH shell (ssh_cli)
 suggest([], _) ->
-    io:format("S: ~p~n", [[]]),
     {no, "", []};
-suggest([One], {Prefix, _}) when is_list(One) ->
-    io:format("S: ~p~n", [One--Prefix]),
+suggest([One], Prefix) when is_list(One) ->
     {yes, lists:flatten([One--Prefix, " "]), []};
-suggest([One], {_, {Bpref, BprefS}}) when is_binary(One) ->
-    <<Bpref:BprefS/binary, Suffix/binary>> = One,
-    io:format("S: ~p~n", [Suffix]),
-    {yes, Suffix, []};
 suggest(Multiple, _) when is_list(Multiple) ->
-    %% FIXME cannot return binaries, aaargh!
-    io:format("S/M: ~p~n", [Multiple]),
     {yes, "", Multiple}.
 
 %% @doc Try to find matching commands or parameters
 expand({full, [], Prefix, 0}) ->
-    suggest(find_commands_by_prefix(Prefix), {Prefix, ignore});
+    suggest(find_commands_by_prefix(Prefix), Prefix);
 expand({full, Cmd, Prefix, Argv}) ->
     [{_, {Fun, Mod}}] = ets:lookup(?CACHE, Cmd),
     try
-        %% allow Mod:Fun({completions, _}) to return binaries as well
-        Bpref = erlang:list_to_binary(Prefix),
-        BprefS = erlang:byte_size(Bpref),
-
         %% get all available completions
         Completions = Mod:Fun({completions, Argv}),
-
-        io:format("bprefix: ~p (~p)~n", [Bpref, BprefS]),
-
         %% find matching and suggest matching completions
-        Matching = lists:filter(
-            fun(Arg) when is_list(Arg) -> lists:prefix(Prefix, Arg);
-               (<<B:BprefS/binary, _/binary>>) when B =:= Bpref -> true;
-               (_) -> false
-            end,
-            Completions),
-        io:format("Matching ~p~n", [Matching]),
-        suggest(Matching, {Prefix, {Bpref, BprefS}})
-    catch error:E when E =:= undef ->
-        io:format("Error ~p~n", [E]),
-        suggest([], {[], ignore})
+        Matching = lists:filter(fun(Arg) ->
+                    lists:prefix(Prefix, Arg)
+            end, Completions),
+        suggest(Matching, Prefix)
+    catch error:E when E =:= undef; E =:= function_clause ->
+        suggest([], Prefix)
     end;
 expand({args, Cmd, Prefix, Argv}) ->
     expand({full, lists:reverse(Cmd), lists:reverse(Prefix), Argv});
@@ -216,7 +196,7 @@ expand({partial, [Prefix|L]}) when is_list(Prefix) ->
 expand(" " ++ Cmd) when is_list(Cmd) ->
     expand({partial, [" " | string:tokens(Cmd, " ")]});
 expand([]) ->
-    suggest(find_commands_by_prefix(""), {"", ignore});
+    suggest(find_commands_by_prefix(""), "");
 expand(Cmd) when is_list(Cmd) ->
     expand({partial, string:tokens(Cmd, " ")}).
 
@@ -241,24 +221,25 @@ auto_completion_test_() ->
      fun() ->
                 ?CACHE = initialize_cache(),
                 true = ets:insert(?CACHE, [
-                            {"reload", {reload, eco_shell_std}},
-                            {"newline",{io, nl}},
-                            {"nop",    {foo, bar}}
+                            {"newline", {nl, io}},
+                            {"nop",     {foo, bar}}
+                            %{"foo",    {erlang, time}},
+                            %{"bar",    {oops}}
                             ]),
                 setup_ok
         end,
      fun(setup_ok) ->
                 Tests = [
-                        { {yes, "eload ", []}, "r" },
-                        { {yes, "oad ", []}, "rel" },
-                        { {yes, "bc ", []}, "reload a" },
+                        %{ {yes, "oo ", []}, "r" },
+                        %{ {yes, "o ", []}, "fo" },
+                        %{ {yes, "ops", []}, "bar o" },
                         { {yes, "wline ", []}, "ne" },
-                        { {yes, "", ["newline", "nop"]}, "n" },
-                        { {yes, "", eco_shell_std:reload({completions, 1}) }, ("reload ") },
-                        { {no, [], []}, "newline " },
-                        { {no, [], []}, "reload a " },
-                        { {no, [], []}, "reload abc y" },
-                        { {no, [], []}, "x" }
+                        { {yes, "", ["newline", "nop"]}, "n" }
+                        %{ {no, [], []}, "newline " },
+                        %{ {no, [], []}, "reload a " },
+                        %{ {no, [], []}, "reload abc y" },
+                        %{ {no, [], []}, "x" },
+                        %{ {yes, "", ["bar", "baz", "bah"]}, "foo "}
                         ],
                 [ { iolist_to_binary(["User input: ", I]), fun() ->
                         ?assertEqual(R, expand(lists:reverse(I)))
