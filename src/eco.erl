@@ -54,6 +54,7 @@
 %% @doc Start the eco application
 
 -spec start() -> {ok, pid()} | {error, Reason :: any()}.
+
 start() ->
     application:start(eco).
 
@@ -67,6 +68,7 @@ start() ->
 %% and make this call internally for you.
 
 -spec initialize() -> ok.
+
 initialize() ->
     eco_app:init_clean().
 
@@ -77,6 +79,7 @@ initialize() ->
 %% No file will be loaded unless you do a proper <em>setup/1</em> call.
 
 -spec start_link(binary() | string()) -> {ok, pid()}.
+
 start_link(ConfigDir) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [ConfigDir], []).
 
@@ -86,6 +89,7 @@ start_link(ConfigDir) ->
 %% indicating that configuration has not been initialized.
 
 -spec terms(filename()) -> Terms :: [any()].
+
 terms(Filename) when is_binary(Filename) ->
     case mnesia:dirty_read({eco_snapshot, Filename}) of
         [#eco_snapshot{terms = T}] -> T;
@@ -100,6 +104,7 @@ terms(Filename) ->
 %% Returns atom <em>undefined</em> if no value has been found.
 
 -spec term(Key :: any(), Filename :: filename()) -> Term :: term() | undefined.
+
 term(Key, Filename) ->
     term(Key, Filename, undefined).
 
@@ -107,6 +112,7 @@ term(Key, Filename) ->
 %% in the third argument.
 
 -spec term(Key :: any(), Filename :: filename(), Default :: term()) -> Term :: term().
+
 term(Key, Filename, Default) when is_binary(Filename) ->
     case mnesia:dirty_read({eco_kv, {Filename, Key}}) of
         [#eco_kv{value = V}] -> V;
@@ -131,6 +137,7 @@ term(Key, Filename, Default) ->
 %% interface.
 
 -spec sub(Filename :: filename()) -> ok.
+
 sub(Filename) ->
     eco_ps:subscribe(Filename).
 
@@ -157,12 +164,14 @@ sub(Filename) ->
 
 -spec setup(Filename :: filename(), Opts :: opts()) ->
     {ok, Filename :: filename()} | {error, Reason :: any()}.
+
 setup(Filename, Opts) when is_list(Opts) ->
     {ok, Eco = #eco_config{}} = parse_opts(Filename, Opts),
     call({setup_config, Eco}).
 
 -spec setup(Filename :: filename()) ->
     {ok, Filename :: filename()} | {error, Reason :: any()}.
+
 setup(Filename) when is_binary(Filename) ->
     setup(Filename, []);
 setup(Filename) ->
@@ -178,6 +187,7 @@ setup(Filename) ->
     {ok, Filename :: filename()} |
     {fallback, {snapshot, calendar:datetime()}, {reason, any()}} |
     {error, Reason :: any()}.
+
 reload(Filename) when is_binary(Filename) ->
     call({reload_config, Filename});
 reload(#eco_config{name = Filename}) ->
@@ -187,6 +197,7 @@ reload(Filename) ->
 
 %% @doc Fetch list of config filenames that were set up
 -spec names() -> [filename()].
+
 names() ->
     %% foldl would be just enough; leaving the gate open with qlc
     do_qlc(
@@ -261,6 +272,7 @@ call(Msg) ->
     gen_server:call(?MODULE, Msg).
 
 -spec parse_opts(filename(), [opt()]) -> {ok, #eco_config{}}.
+
 parse_opts(Filename, Opts) when is_list(Opts) ->
     parse_opts2(
         proplists:unfold(Opts),
@@ -286,6 +298,7 @@ parse_opts2([Opt|_], _) ->
 
 -spec ensure_dump_dir(binary()) ->
     {ok, binary()} | {error, {binary(), eacces | eexist | enoent | enospc | enotdir}}.
+
 ensure_dump_dir(Dir) ->
     D = filename:join([Dir, <<"dump">>]),
     case filelib:is_dir(D) of
@@ -299,17 +312,20 @@ ensure_dump_dir(Dir) ->
     end.
 
 -spec make_dump_name(binary()) -> {ok, binary()}.
+
 make_dump_name(Name) ->
     N = iolist_to_binary([Name, ".", format_time(erlang:localtime()), ".dump"]),
     {ok, N}.
 
 -spec format_time(calendar:datetime()) -> string().
+
 format_time({{Y,M,D},{H,Min,S}}) ->
     io_lib:format("~4.10.0B_~2.10.0B_~2.10.0B_~2.10.0B_~2.10.0B_~2.10.0B",
     [Y, M, D, H, Min, S]).
 
 -spec dump_current(filename(), binary()) ->
     ok | {error, enoent | enotdir | enospc | eacces | eisdir}.
+
 dump_current(Name, ConfigDir) ->
     {ok, #eco_snapshot{name = Name, raw = Raw}} = find_snapshot(Name),
     {ok, DumpDir} = ensure_dump_dir(ConfigDir),
@@ -318,6 +334,7 @@ dump_current(Name, ConfigDir) ->
     file:write_file(Fname, Raw).
 
 -spec find_snapshot(filename()) -> {ok, #eco_snapshot{}} | undefined.
+
 find_snapshot(Filename) ->
     case mnesia:transaction(
             fun() ->
@@ -332,6 +349,7 @@ find_snapshot(Filename) ->
 
 -spec do_trans(Subject :: filename(), Transaction :: function()) ->
     {ok, any()} | {error, any()}.
+
 do_trans(Filename, Transaction) when is_function(Transaction) ->
     case mnesia:transaction(Transaction) of
         {aborted, Reason} ->
@@ -341,6 +359,7 @@ do_trans(Filename, Transaction) when is_function(Transaction) ->
     end.
 
 -spec do_qlc(QLC :: term()) -> any().
+
 do_qlc(QLC) ->
     F = fun() -> qlc:e(QLC) end,
     {atomic, Val} = mnesia:transaction(F),
@@ -348,10 +367,12 @@ do_qlc(QLC) ->
 
 -spec make_path({binary() | string(),binary() | [byte()]}) ->
     binary() | string().
+
 make_path({Dir, Name}) ->
     filename:join([Dir, Name]).
 
 -spec setup_mirror(#eco_config{}) -> ok | {error, any()}.
+
 setup_mirror(#eco_config{name = Filename, config_path = CP,
                          adapter = A, force_kv = FKV, validators = V} = Eco) ->
     {ok, _} = ensure_file_ok(CP),
@@ -362,7 +383,7 @@ setup_mirror(#eco_config{name = Filename, config_path = CP,
             raw         = Raw,
             terms       = Terms
             }),
-    _ = case Terms of
+    case Terms of
         T when is_list(T) ->
             _ = [ mnesia:write(#eco_kv{
                         key = Key,
@@ -377,18 +398,21 @@ setup_mirror(#eco_config{name = Filename, config_path = CP,
     ok.
 
 -spec clear_kvs(#eco_config{}) -> ok | {error, any()}.
+
 clear_kvs(#eco_config{name = Filename}) ->
     KVs = mnesia:match_object({eco_kv, {Filename, '_'}, '_'}),
     _ = [ mnesia:delete_object(Obj) || Obj <- KVs ],
     ok.
 
 -spec kv_unfold(filename(), list()) -> list().
+
 kv_unfold(Filename, List) ->
     lists:map(fun({K,V}) -> {{Filename, K}, V};
             (Else) -> {{Filename, Else}, true}
         end, List).
 
 -spec maybe_kv_check(term(), boolean()) -> term().
+
 maybe_kv_check(Terms, false) -> Terms;
 maybe_kv_check(Terms, true) when is_list(Terms) ->
     lists:map(fun({K,V}) -> {K,V};
@@ -399,6 +423,7 @@ maybe_kv_check(Terms, true) ->
 
 -spec ensure_file_ok(config_path()) ->
     {ok, config_path()} | {error, {not_regular_file, config_path()}}.
+
 ensure_file_ok(CP) ->
     case filelib:is_regular(CP) of
         true -> {ok, regular};
@@ -408,6 +433,7 @@ ensure_file_ok(CP) ->
 
 -spec load_config(A :: adapter(), CP :: config_path(),
     V :: validators(), FKV :: boolean()) -> {ok, {binary(), term()} | {error, any()}}.
+
 load_config(A, CP, V, FKV) ->
     {ok, Raw} = file:read_file(CP),
     {ok, Terms} = load_config2(A, CP),
@@ -420,6 +446,7 @@ load_config(A, CP, V, FKV) ->
     end.
 
 -spec load_config2(adapter(), config_path()) -> {ok, term()}.
+
 load_config2(native, File) ->
     u_consult(File);
 load_config2(Custom, File) when is_function(Custom) ->
@@ -431,6 +458,7 @@ load_config2(Custom, File) ->
 
 -spec validate(Terms :: [any()], Vs :: validators()) ->
     {ok, [any()]} | {error, {validation_error, any()}}.
+
 validate(Terms, []) -> {ok, Terms};
 validate(Terms, Vs) when is_list(Vs) ->
     {ok, lists:foldl(
@@ -450,7 +478,9 @@ f_call(F, A) when is_function(F) ->
     F(A).
 
 %% @doc Same as file:consult/1 except reads unicode
+
 -spec u_consult(config_path()) -> {ok, term()} | {error, any()}.
+
 u_consult(File) ->
     case file:open(File, [read, {encoding, unicode}]) of
         {ok, Fd} ->
@@ -462,6 +492,7 @@ u_consult(File) ->
     end.
 
 %% @doc lib/kernel-2.15.1/src/file.erl
+
 consult_stream(Fd) ->
     consult_stream(Fd, 1, []).
 consult_stream(Fd, Line, Acc) ->
@@ -475,6 +506,7 @@ consult_stream(Fd, Line, Acc) ->
     end.
 
 -spec to_binary(binary() | string()) -> binary().
+
 to_binary(B) when is_binary(B) -> B;
 to_binary(L) when is_list(L) -> iolist_to_binary(L).
 
