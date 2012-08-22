@@ -70,9 +70,8 @@ with `make doc` target.
 ### Quick start
 
 1. Requirements:
-
-    * Erlang/OTP (tested with R15B01)
-    * Rebar
+  * Erlang/OTP (tested with R15B01)
+  * Rebar
 
 2. Build the source code:
 
@@ -281,7 +280,7 @@ This is probably the tool you will give to your customers.
 1. Key-based authentication
 2. Password-based authentication
 
-    **TODO / under construction**
+  **TODO / under construction**
 
 
 Now you can access your management console by simply doing:
@@ -299,13 +298,13 @@ looking for is surprisingly named `reload`.
 
 #### Extending the eco shell
 
-    **TODO / under construction**
+  **TODO / under construction**
 
 #### Adding custom validation
 
-    **TODO / under construction**
+  **TODO / under construction**
 
 #### Configuration adapters - how to use different file formats?
 
-    **TODO / under construction**
+  **TODO / under construction**
 
