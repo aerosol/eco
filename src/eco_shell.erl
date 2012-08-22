@@ -170,17 +170,21 @@ suggest(Multiple, _) when is_list(Multiple) ->
 expand({full, [], Prefix, 0}) ->
     suggest(find_commands_by_prefix(Prefix), Prefix);
 expand({full, Cmd, Prefix, Argv}) ->
-    [{_, {Fun, Mod}}] = ets:lookup(?CACHE, Cmd),
-    try
-        %% get all available completions
-        Completions = Mod:Fun({completions, Argv}),
-        %% find matching and suggest matching completions
-        Matching = lists:filter(fun(Arg) ->
-                    lists:prefix(Prefix, Arg)
-            end, Completions),
-        suggest(Matching, Prefix)
-    catch error:E when E =:= undef; E =:= function_clause ->
-        suggest([], Prefix)
+    case ets:lookup(?CACHE, Cmd) of
+        [{_, {Fun, Mod}}] ->
+            try
+                %% get all available completions
+                Completions = Mod:Fun({completions, Argv}),
+                %% find matching and suggest matching completions
+                Matching = lists:filter(fun(Arg) ->
+                            lists:prefix(Prefix, Arg)
+                    end, Completions),
+                suggest(Matching, Prefix)
+            catch error:E when E =:= undef; E =:= function_clause ->
+                suggest([], Prefix)
+            end;
+        _ ->
+            suggest([], Prefix)
     end;
 expand({args, Cmd, Prefix, Argv}) ->
     expand({full, lists:reverse(Cmd), lists:reverse(Prefix), Argv});
@@ -234,11 +238,11 @@ auto_completion_test_() ->
                         %{ {yes, "o ", []}, "fo" },
                         %{ {yes, "ops", []}, "bar o" },
                         { {yes, "wline ", []}, "ne" },
-                        { {yes, "", ["newline", "nop"]}, "n" }
-                        %{ {no, [], []}, "newline " },
-                        %{ {no, [], []}, "reload a " },
-                        %{ {no, [], []}, "reload abc y" },
-                        %{ {no, [], []}, "x" },
+                        { {yes, "", ["newline", "nop"]}, "n" },
+                        { {no, [], []}, "newline " },
+                        { {no, [], []}, "reload a " },
+                        { {no, [], []}, "reload abc y" },
+                        { {no, [], []}, "x" }
                         %{ {yes, "", ["bar", "baz", "bah"]}, "foo "}
                         ],
                 [ { iolist_to_binary(["User input: ", I]), fun() ->
