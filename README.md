@@ -7,26 +7,24 @@ Eco is hopefully your number one choice when it comes to building configurable
 Erlang applications.
 
 Eco provides tools to create accessible configuration
-management, even for people that are not (or willing not to be) familiar with
-Erlang itself (think of sysadmins, maintainance deparments etc.). It is backed
-up with Mnesia database providing unique features in the spirit of Erlang.
+management, even for people that are not (or not willing) familiar with
+Erlang itself (think sysadmins, maintenance deparments etc.). It is backed
+up by an Mnesia database which offers some unique features in the spirit of Erlang.
 
-Eco has evolved from my previous project with similar goals - confetti.
+Eco has evolved from a pervious project named "confetti"; each having similar goals.
 
 ## Main features
 
-* Easy, intuitive programmer's interface
-* Multiple configuration file formats support (Erlang terms is the native
-  data format, but you can easily switch to JSON/YAML/XML/INI or roll
-  out your own format adapter).
-* SSH Management Console letting the programmer expose Erlang functions
-  to end-users via simple commandline interface, as well as perform the
-  basic operations such as runtime configuration reload.
-* Fault tollerance. The configuration files are mirrored in persistent Mnesia
-  tables. Eco will not let your application crash if someone will messes up
-  the configuration files (at least as long as they are syntactically correct
-  and are passing your custom validation tests).
-  Eco will always try to apply fallback to the last known working configuration.
+* Easy, intuitive programming interface
+* Multiple file formats supported (Erlang terms natively, however
+  JSON/YAML/XML/INI or your own custom adapter are options)
+* SSH Management console allows the programmer to expose API functions
+  to end-users via a simple command-line interface, as well as perform some
+  basic operations like configuration reloading.
+* Fault Tolerance is provided through a multi-master mirroring of Mnesia database tables.
+  Eco will not crash due to incorrect configuration files so long as they pass
+  customizable validation and are syntactically correct.
+* Eco will always try to fallback safely to the last known working configuration.
 
 ### Feature matrix
 
