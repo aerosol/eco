@@ -9,7 +9,7 @@ Erlang applications.
 Eco provides tools to create accessible configuration
 management, even for people that are not (or not willing) familiar with
 Erlang itself (think sysadmins, maintenance deparments etc.). It is backed
-up by an Mnesia database which offers some unique features in the spirit of Erlang.
+up by a Mnesia database which offers some unique features in the spirit of Erlang.
 
 Eco has evolved from a pervious project named "confetti"; each having similar goals.
 
@@ -103,14 +103,14 @@ your existing Erlang/OTP application.
 
 #### Starting the eco application
 
-Because eco reqiures mnesia, on first run you must initialize it.
+Because eco reqiures Mnesia, on first run you must initialize it.
 Eco can do this automatically for you by providing the argument "-eco_auto_init true"
 
 ```
 $ erl -pa ebin -pa deps/*/ebin -s eco -eco_auto_init true
 ```
 
-You could otherwise initialize the mnesia schema by hand.
+You could otherwise initialize the Mnesia schema by hand.
 To do so start an erlang shell (with the provided ebin paths)
 and execute eco:initialize() as follows:
 
