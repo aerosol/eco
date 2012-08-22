@@ -159,20 +159,20 @@ Every configuration file you will make use of needs to be set up. This is done
 by calling the `eco:setup/1` or `eco:setup/2` function.
 Let's assume you have already created a configuration file for your application:
 
-    ```erlang
-    %% conf/foo.conf
+  ```erlang
+  %% conf/foo.conf
 
-    {username, "root"}.
-    {password, "123456"}. %% it is your root password, isn't it?
-    ```
+  {username, "root"}.
+  {password, "123456"}. %% it is your root password, isn't it?
+  ```
 
 Most likely you have an OTP process that will make use of that data, therefore
 you should call `eco:setup`:
 
-    ```erlang
-        {ok, F} = eco:setup(<<"foo.conf">>),
-        ...
-    ```
+  ```erlang
+  {ok, F} = eco:setup(<<"foo.conf">>),
+  ...
+  ```
 
 The `setup` call might be done in your process' supervisor or the `init/1`
 function itself -- that is entirely up to you, but please note that there is no
@@ -194,22 +194,22 @@ interested in calling `setup/2` which accepts a list of additional setup options
 The configuration is loaded now and are ready to fetch its values.
 
 
-    ```erlang
-        ...
-        User = eco:term(username, F),
-        Pass = eco:term(password, F),
-        ...
-    ```
+  ```erlang
+  ...
+  User = eco:term(username, F),
+  Pass = eco:term(password, F),
+  ...
+  ```
 
 `eco:term` interface is similar to `proplists:get_value`'s, so you can provide
 the defaults as well:
 
-    ```erlang
-        ...
-        User = eco:term(username, F, <<"Anonymous">>),
-        Pass = eco:term(password, F),
-        ...
-    ```
+  ```erlang
+  ...
+  User = eco:term(username, F, <<"Anonymous">>),
+  Pass = eco:term(password, F),
+  ...
+  ```
 
 If a key cannot be found and there is no default value provided, `eco:term`
 will return `undefined`. Don't expect it to crash!
@@ -230,12 +230,12 @@ tagged with the current timestamp for easier maintenance.
 Let's change some configuration values:
 
 
-    ```erlang
-    %% conf/foo.conf
+  ```erlang
+  %% conf/foo.conf
 
-    {username, "joe"}.
-    {password, "moar entrOpy for greater good!"}.
-    ```
+  {username, "joe"}.
+  {password, "moar entrOpy for greater good!"}.
+  ```
 
 And reload them using the Erlang shell:
 
@@ -246,24 +246,24 @@ Looks like everything went fine and the new credentials are now accessible for
 your code. But that will be noticed by your process the next time it fetches
 the values. Let's make it more robust by adding a configuration reload subscription.
 
-    ```erlang
-        ...
-        ok = eco:sub(<<"foo.conf">>),
-        ...
-    ```
+  ```erlang
+  ...
+  ok = eco:sub(<<"foo.conf">>),
+  ...
+  ```
 
 The `sub` call basically means that the calling process will receieve a message
 in the form of `{eco_reload, <<"foo.conf">>}` everytime the configuration has
 been successfully reloaded. So what you need now is to handle that message.
 Assuming your process is a gen_server, you will most likely do:
 
-    ```erlang
-        ...
-        handle_info({eco_reload, <<"foo.conf">>}, State) ->
-            %% Let the supervisor take care of this
-            {stop, normal, State};
-        ...
-    ```
+  ```erlang
+  ...
+  handle_info({eco_reload, <<"foo.conf">>}, State) ->
+  %% Let the supervisor take care of this
+  {stop, normal, State};
+  ...
+  ```
 
 This way, your process will be stopped and hopefully restarted by a supervisor
 fetching the new values. Alternatively you can just return `{noreply, State}`
