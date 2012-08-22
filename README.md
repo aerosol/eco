@@ -1,6 +1,6 @@
 # eco
 
-> **NOTE!** This README may be incomplete or not entirely true as the project is
+> **NOTE:** This README may be incomplete or not entirely true as the project is
 still under development.
 
 Eco is hopefully your number one choice when it comes to building configurable
@@ -28,9 +28,9 @@ Eco has evolved from a pervious project named "confetti"; each having similar go
 
 ### Feature matrix
 
-*"There are many like it but this one is mine..."*
+*"There are many like it but this one is mine..."* - The Rifleman's Creed
 
-There are few similar projects out there at github. Here is the quick comparsion:
+There are a few similar projects on github, here is the quick comparison:
 
 <table>
 <tr><th></th><th>eco</th><th>confetti</th><th>econf</th><th>nakaz</th></tr>
@@ -75,11 +75,11 @@ with `make doc` target.
 
         $ git clone git://github.com/aerosol/vim-conf.git
 
-3. Run the example client:
+3. Compile and run the example client:
 
         $ make example
 
-This make target will compile eco and execute the following:
+This will make the example and execute the following:
 
     erl -pa ebin -boot start_sasl -sname example -s eco_example -eco_plugins shell -eco_auto_init true
 
@@ -89,29 +89,30 @@ will be started reading configuration values from `conf/example.conf`.
 
 ### Start for real
 
-Most likely you would like to add eco to your rebar dependencies. You can do that
-by putting the following directive into your `rebar.conf`:
+You will most likely want to add eco to your rebar dependenices,
+just specify the following directive in your rebar.config
 
     {deps, [
      {'eco', ".*", {git, "git://github.com/aerosol/eco.git"}}
     ]}.
 
-Next, pull and compile eco with `rebar get-deps compile`. If everything went OK,
-you should be able to see compiled Erlang BEAMS inside of `deps/eco/ebin`.
-You are now ready to plug eco into your existing OTP application.
+Next, get-deps (git pull) and compile echo with `make all`.
+If everything went well, you should see compiled Erlang .beam
+files within deps/eco/ebin. Now you're ready to plug eco into
+your existing Erlang/OTP application.
 
 #### Starting the eco application
 
-Because eco relies on mnesia, first time you run it, a schema must be initialized.
-Eco will do it automatically if you provide the `eco_auto_init` argument:
+Because eco reqiures mnesia, on first run you must initialize it.
+Eco can do this automatically for you by providing the argument "-eco_auto_init true"
 
 ```
 $ erl -pa ebin -pa deps/*/ebin -s eco -eco_auto_init true
 ```
 
-Otherwise you should initialize mnesia schema by hand. To do this start plain
-erlang shell (with appropriate code paths added) and execute `eco:initialize()`
-as follows:
+You could otherwise initialize the mnesia schema by hand.
+To do so start an erlang shell (with the provided ebin paths)
+and execute eco:initialize() as follows:
 
     $ erl -pa ebin -pa deps/*/ebin -s eco
     Erlang R15B01 (erts-5.9.1) [source] [64-bit] [smp:4:4] [async-threads:0] [hipe] [kernel-poll:false]
@@ -144,17 +145,18 @@ Don't worry if you have already started these on your own.
 
 #### Setting up the configuration files
 
-Eco can handle any configuration file format (in worst case scenario, with a
-little bit of additional programming). For now, let's just stick to native
-format which is simply an Erlang term, that can be read using `file:consult/1`.
+Eco can handle any configuration file format (the worst case requires
+a little additional programming).
+For now, let's just stick to native format which is simply an Erlang term,
+that can be read using `file:consult/1`.
 
 Configuration files are stored in `conf/` directory by default. This directory
 is relative to your application directory. If you are not happy with the default
-path, you can change it by providing `config_dir` setting within the `StartArgs`.
+path, you can change it by providing the `config_dir` setting within the `StartArgs`.
 We will cover that later.
 
-Every configuration file you will make use of needs to be set up. This is done
-by calling the `eco:setup/1` or `eco:setup/2` function.
+Every configuration file you intend to use will need to be set up.
+This is done by calling the `eco:setup/1` or `eco:setup/2` function.
 Let's assume you have already created a configuration file for your application:
 
   ```erlang
@@ -164,7 +166,7 @@ Let's assume you have already created a configuration file for your application:
   {password, "123456"}. %% it is your root password, isn't it?
   ```
 
-Most likely you have an OTP process that will make use of that data, therefore
+You will, most likely you have an OTP process that will make use of that data, therefore
 you should call `eco:setup`:
 
   ```erlang
@@ -172,7 +174,7 @@ you should call `eco:setup`:
   ...
   ```
 
-The `setup` call might be done in your process' supervisor or the `init/1`
+The `setup` call should be done in your processes supervisor or the `init/1`
 function itself -- that is entirely up to you, but please note that there is no
 reason for you to call `setup` more than once. And you may definitely expect some
 strange behaviour when calling `setup` in more than one place with different
@@ -184,12 +186,14 @@ The above call assumes that:
 * You are not using any validators except for the basic syntax coherence.
 * The configuration read is a list of key-value terms.
 
-If any of the above is false, eco will crash with an error message that should
-be self-explainatory. If you want to modify those assumptions, you might be
+If any of the above assumtions is not true, eco will crash with an
+error message that should be self-explainatory.
+If you want to modify those assumptions, you might be
 interested in calling `setup/2` which accepts a list of additional setup options.
 
-`setup` returns the `Filename` argument, which is done just for convinience.
-The configuration is loaded now and are ready to fetch its values.
+`setup` returns the `Filename` argument, which is done only for convinience.
+
+The configuration is loaded now and are ready proceed.
 
 
   ```erlang
@@ -210,14 +214,16 @@ the defaults as well:
   ```
 
 If a key cannot be found and there is no default value provided, `eco:term`
-will return `undefined`. Don't expect it to crash!
+will return `undefined`.
 
-> **NOTE!** Refer to the source files/API documentation for more details.
+> **NOTE:** Refer to the source files/API documentation for more details.
 
 #### Reloading the conifguration
 
-There are two ways to reload a configuration file. One is by calling the API
-function `reload/1` from within you code or the Erlang shell.
+There are two ways to reload an eco configuration.
+The first way is provided by the `reload/1` function which you can
+execute directly from the Erlang console.
+The second way it through an SSH console (see below).
 
 Each time you will successfully reload a configuration file, a backup of the
 previous one will be saved to `conf/dump/` directory. Every "dump" file will be
@@ -252,8 +258,10 @@ the values. Let's make it more robust by adding a configuration reload subscript
 
 The `sub` call basically means that the calling process will receieve a message
 in the form of `{eco_reload, <<"foo.conf">>}` everytime the configuration has
-been successfully reloaded. So what you need now is to handle that message.
-Assuming your process is a gen_server, you will most likely do:
+been successfully reloaded.
+So now all you need to do is handle that message, assuming your process is an OTP one,
+you will most likely use handle_info like so:
+
 
   ```erlang
   ...
@@ -271,15 +279,18 @@ is now known to the client.
 ##### Reloading using the eco shell
 
 Eco comes with an SSH server for basic configuration management commands support.
-This is probably the tool you will give to your customers.
+This is probably the tool you will give to authorized persons without access
+to the Erlang console.
 
 ###### Setting up the SSH server
 
 1. Key-based authentication
-2. Password-based authentication
 
   **TODO / under construction**
 
+2. Password-based authentication
+
+  **TODO / under construction**
 
 Now you can access your management console by simply doing:
 
