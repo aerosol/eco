@@ -103,7 +103,7 @@ your existing Erlang/OTP application.
 
 #### Starting the eco application
 
-Because eco reqiures Mnesia, on first run you must initialize it.
+Because eco requires Mnesia, on first run you must initialize it.
 Eco can do this automatically for you by providing the argument "-eco_auto_init true"
 
 ```
